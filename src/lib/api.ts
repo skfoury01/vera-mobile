@@ -1,19 +1,67 @@
 import { API_URL } from '@/lib/config';
+import {
+  clearSessionToken,
+  getSessionToken,
+  setSessionToken,
+} from '@/lib/sessionStorage';
 
-export type ApiErrorBody = {
+export type SafeUser = {
+  id: string;
+  email?: string | null;
+  name?: string | null;
+  username?: string | null;
+  avatarUrl?: string | null;
+  role?: string | null;
+  [key: string]: unknown;
+};
+
+export type AuthErrorCode =
+  | 'invalid'
+  | 'email_unverified'
+  | 'rate_limited'
+  | 'network_error'
+  | 'request_timeout'
+  | 'unexpected_server_error'
+  | 'invalid_response'
+  | 'token_storage_failed'
+  | string;
+
+type ApiErrorBody = {
   code?: string;
+  error?: string;
   message?: string;
   details?: unknown;
-  error?: string;
+};
+
+type ApiRequestOptions = Omit<RequestInit, 'body' | 'headers'> & {
+  body?: unknown;
+  token?: string | null;
+  timeoutMs?: number;
+};
+
+type LoginResponse = {
+  token?: string;
+  accessToken?: string;
+  sessionToken?: string;
+  bearerToken?: string;
+  user?: SafeUser;
+  viewer?: SafeUser;
+  data?: LoginResponse;
+  session?: LoginResponse;
 };
 
 export class ApiError extends Error {
   status: number;
-  code?: string;
+  code: AuthErrorCode;
   userMessage: string;
   details?: unknown;
 
-  constructor(params: { status: number; code?: string; userMessage: string; details?: unknown }) {
+  constructor(params: {
+    status: number;
+    code: AuthErrorCode;
+    userMessage: string;
+    details?: unknown;
+  }) {
     super(params.userMessage);
     this.name = 'ApiError';
     this.status = params.status;
@@ -23,20 +71,115 @@ export class ApiError extends Error {
   }
 }
 
-type ApiRequestOptions = Omit<RequestInit, 'body' | 'headers'> & {
-  body?: unknown;
-  headers?: HeadersInit;
-  token?: string | null;
-  timeoutMs?: number;
-};
-
 const DEFAULT_TIMEOUT_MS = 15000;
 
-export async function apiRequest<TResponse = unknown>(
+export async function login(
+  email: string,
+  password: string,
+  deviceName?: string,
+  platform?: string
+) {
+  const parsed = await apiRequest<LoginResponse>('/api/mobile/auth/login', {
+    method: 'POST',
+    body: {
+      email,
+      password,
+      ...(deviceName ? { deviceName } : {}),
+      ...(platform ? { platform } : {}),
+    },
+  });
+
+  const token = extractToken(parsed);
+  const user = extractUser(parsed);
+
+  if (!token || !user) {
+    throw new ApiError({
+      status: 0,
+      code: 'invalid_response',
+      userMessage: 'Vera returned an unexpected login response. Please try again.',
+      details: parsed,
+    });
+  }
+
+  const stored = await setSessionToken(token);
+  if (!stored) {
+    throw new ApiError({
+      status: 0,
+      code: 'token_storage_failed',
+      userMessage: 'Unable to save your secure mobile session on this device.',
+    });
+  }
+
+  return user;
+}
+
+export async function getCurrentUser() {
+  const token = await getStoredToken();
+  if (!token) {
+    return null;
+  }
+
+  const parsed = await apiRequest<LoginResponse>('/api/mobile/auth/me', {
+    method: 'GET',
+    token,
+  });
+
+  const user = extractUser(parsed);
+  if (!user) {
+    throw new ApiError({
+      status: 0,
+      code: 'invalid_response',
+      userMessage: 'Vera returned an unexpected session response.',
+      details: parsed,
+    });
+  }
+
+  return user;
+}
+
+export async function logout() {
+  const token = await getStoredToken();
+
+  try {
+    if (token) {
+      await apiRequest('/api/mobile/auth/logout', {
+        method: 'POST',
+        token,
+      });
+    }
+  } finally {
+    await removeStoredToken();
+  }
+}
+
+export async function logoutAll() {
+  const token = await getStoredToken();
+
+  try {
+    if (token) {
+      await apiRequest('/api/mobile/auth/logout-all', {
+        method: 'POST',
+        token,
+      });
+    }
+  } finally {
+    await removeStoredToken();
+  }
+}
+
+export async function getStoredToken() {
+  return getSessionToken();
+}
+
+export async function removeStoredToken() {
+  await clearSessionToken();
+}
+
+async function apiRequest<TResponse = unknown>(
   path: string,
   options: ApiRequestOptions = {}
 ): Promise<TResponse | null> {
-  const { body, headers, token, timeoutMs, ...requestInit } = options;
+  const { body, token, timeoutMs, ...requestInit } = options;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
@@ -44,19 +187,13 @@ export async function apiRequest<TResponse = unknown>(
     const response = await fetch(buildApiUrl(path), {
       ...requestInit,
       body: serializeBody(body),
-      headers: buildHeaders({ body, headers, token }),
+      headers: buildHeaders(token),
       signal: controller.signal,
     });
     const parsed = await parseResponse(response);
 
     if (!response.ok) {
-      const errorBody = toApiErrorBody(parsed);
-      throw new ApiError({
-        status: response.status,
-        code: errorBody.code,
-        userMessage: errorBody.message ?? errorBody.error ?? 'Something went wrong. Please try again.',
-        details: errorBody.details ?? parsed,
-      });
+      throw buildResponseError(response.status, parsed);
     }
 
     return parsed as TResponse | null;
@@ -69,7 +206,7 @@ export async function apiRequest<TResponse = unknown>(
       throw new ApiError({
         status: 0,
         code: 'request_timeout',
-        userMessage: 'The request timed out. Please check your connection and try again.',
+        userMessage: 'The request timed out. Please try again.',
       });
     }
 
@@ -84,21 +221,17 @@ export async function apiRequest<TResponse = unknown>(
   }
 }
 
-export function buildApiUrl(path: string) {
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  return `${API_URL}${normalizedPath}`;
+function buildApiUrl(path: string) {
+  return `${API_URL}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
-function buildHeaders(options: ApiRequestOptions) {
-  const headers = new Headers(options.headers);
+function buildHeaders(token?: string | null) {
+  const headers = new Headers();
   headers.set('Accept', 'application/json');
+  headers.set('Content-Type', 'application/json');
 
-  if (options.body !== undefined && !(options.body instanceof FormData)) {
-    headers.set('Content-Type', 'application/json');
-  }
-
-  if (options.token) {
-    headers.set('Authorization', `Bearer ${options.token}`);
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
   }
 
   return headers;
@@ -109,18 +242,10 @@ function serializeBody(body: unknown) {
     return undefined;
   }
 
-  if (body instanceof FormData || typeof body === 'string' || body instanceof Blob) {
-    return body;
-  }
-
   return JSON.stringify(body);
 }
 
 async function parseResponse(response: Response) {
-  if (response.status === 204 || response.status === 205) {
-    return null;
-  }
-
   const text = await response.text();
   if (!text) {
     return null;
@@ -128,13 +253,51 @@ async function parseResponse(response: Response) {
 
   const contentType = response.headers.get('content-type') ?? '';
   if (!contentType.toLowerCase().includes('application/json')) {
-    return text;
+    return { message: text };
   }
 
   try {
     return JSON.parse(text);
   } catch {
-    return text;
+    return { message: text };
+  }
+}
+
+function buildResponseError(status: number, parsed: unknown) {
+  const body = toApiErrorBody(parsed);
+  const serverCode = body.code ?? body.error;
+  const code = mapErrorCode(status, serverCode);
+
+  return new ApiError({
+    status,
+    code,
+    userMessage: body.message ?? userMessageForError(code),
+    details: body.details ?? parsed,
+  });
+}
+
+function mapErrorCode(status: number, serverCode?: string): AuthErrorCode {
+  if (serverCode === 'email_unverified') return 'email_unverified';
+  if (serverCode === 'rate_limited') return 'rate_limited';
+  if (status === 401) return 'invalid';
+  if (status === 403) return serverCode ?? 'email_unverified';
+  if (status === 429) return 'rate_limited';
+  if (serverCode) return serverCode;
+  return 'unexpected_server_error';
+}
+
+function userMessageForError(code: AuthErrorCode) {
+  switch (code) {
+    case 'invalid':
+      return 'Your session is invalid or your sign-in details were not accepted.';
+    case 'email_unverified':
+      return 'Please verify your email address before signing in.';
+    case 'rate_limited':
+      return 'Too many attempts. Please wait a moment and try again.';
+    case 'network_error':
+      return 'Unable to reach Vera. Please check your connection and try again.';
+    default:
+      return 'Vera could not complete the request. Please try again.';
   }
 }
 
@@ -148,4 +311,34 @@ function toApiErrorBody(value: unknown): ApiErrorBody {
   }
 
   return {};
+}
+
+function extractToken(response: LoginResponse | null) {
+  return (
+    response?.token ??
+    response?.accessToken ??
+    response?.sessionToken ??
+    response?.bearerToken ??
+    response?.data?.token ??
+    response?.data?.accessToken ??
+    response?.data?.sessionToken ??
+    response?.data?.bearerToken ??
+    response?.session?.token ??
+    response?.session?.accessToken ??
+    response?.session?.sessionToken ??
+    response?.session?.bearerToken ??
+    null
+  );
+}
+
+function extractUser(response: LoginResponse | null): SafeUser | null {
+  return (
+    response?.user ??
+    response?.viewer ??
+    response?.data?.user ??
+    response?.data?.viewer ??
+    response?.session?.user ??
+    response?.session?.viewer ??
+    null
+  );
 }

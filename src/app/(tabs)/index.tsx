@@ -1,9 +1,12 @@
 import { Link } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useAuth } from '@/auth/AuthProvider';
 import { VeraScreen } from '@/components/vera-screen';
 
 export default function HomeScreen() {
+  const { isAuthenticated, user } = useAuth();
+
   return (
     <VeraScreen
       eyebrow="Home"
@@ -11,20 +14,26 @@ export default function HomeScreen() {
       body="A calm command center for subscriptions, creator drops, live moments, and the relationships that matter most."
       symbol="house.fill"
       highlights={[
-        { value: 'Today', label: 'Feed pulse' },
+        { value: isAuthenticated ? 'Signed in' : 'Guest', label: 'Session' },
         { value: '0', label: 'Unread now' },
-        { value: 'Beta', label: 'Mobile shell' },
+        { value: 'Live', label: 'Mobile auth' },
       ]}>
       <View style={styles.panel}>
-        <Text style={styles.panelTitle}>Temporary access</Text>
-        <Text style={styles.panelCopy}>
-          The tab shell is available for navigation QA while native authentication is being defined.
+        <Text style={styles.panelTitle}>
+          {isAuthenticated ? 'Welcome back' : 'Secure mobile sign in'}
         </Text>
-        <Link href="/sign-in" asChild>
-          <Pressable style={({ pressed }) => [styles.button, pressed && styles.pressed]}>
-            <Text style={styles.buttonText}>Open sign in</Text>
-          </Pressable>
-        </Link>
+        <Text style={styles.panelCopy}>
+          {isAuthenticated
+            ? `Signed in${user?.email ? ` as ${user.email}` : ''}.`
+            : 'Use the Vera mobile-auth backend to restore your secure bearer session.'}
+        </Text>
+        {!isAuthenticated && (
+          <Link href="/sign-in" asChild>
+            <Pressable style={({ pressed }) => [styles.button, pressed && styles.pressed]}>
+              <Text style={styles.buttonText}>Open sign in</Text>
+            </Pressable>
+          </Link>
+        )}
       </View>
     </VeraScreen>
   );

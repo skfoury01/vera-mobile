@@ -1,8 +1,9 @@
-import { Link } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -14,25 +15,38 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/AuthProvider';
+import { ApiError } from '@/lib/api';
 
 export default function SignInScreen() {
-  const { signIn } = useAuth();
+  const { login } = useAuth();
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSignIn() {
+    if (!email.trim() || !password) {
+      setError('Enter your email and password to sign in.');
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
 
     try {
-      await signIn({ email: email.trim(), password });
+      await login({ email: email.trim(), password });
+      setPassword('');
+      router.replace('/(tabs)/account');
     } catch (signInError) {
-      setError(signInError instanceof Error ? signInError.message : 'Sign in is unavailable.');
+      setError(toLoginErrorMessage(signInError));
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  async function handleCreateAccount() {
+    await Linking.openURL('https://verapage.com/signup');
   }
 
   return (
@@ -84,7 +98,7 @@ export default function SignInScreen() {
 
               {error && (
                 <View style={styles.errorBox}>
-                  <Text style={styles.errorTitle}>Integration pending</Text>
+                  <Text style={styles.errorTitle}>Sign in failed</Text>
                   <Text style={styles.errorText}>{error}</Text>
                 </View>
               )}
@@ -103,11 +117,12 @@ export default function SignInScreen() {
                 )}
               </Pressable>
 
-              <Link href="/(tabs)" asChild>
-                <Pressable disabled={isSubmitting} style={styles.createLink}>
-                  <Text style={styles.createLinkText}>Create Account</Text>
-                </Pressable>
-              </Link>
+              <Pressable
+                disabled={isSubmitting}
+                onPress={handleCreateAccount}
+                style={({ pressed }) => [styles.createLink, pressed && styles.pressed]}>
+                <Text style={styles.createLinkText}>Create Account</Text>
+              </Pressable>
             </View>
           </ScrollView>
         </SafeAreaView>
@@ -228,3 +243,15 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
 });
+
+function toLoginErrorMessage(error: unknown) {
+  if (error instanceof ApiError) {
+    return error.userMessage;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return 'Vera could not sign you in. Please try again.';
+}

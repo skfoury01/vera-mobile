@@ -1,6 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 
-const SESSION_TOKEN_KEY = 'vera.mobile.sessionToken';
+export const VERA_MOBILE_SESSION_TOKEN_KEY = 'vera.mobile.auth.bearerToken';
 
 async function isSecureStoreAvailable() {
   try {
@@ -16,7 +16,7 @@ export async function getSessionToken() {
       return null;
     }
 
-    return await SecureStore.getItemAsync(SESSION_TOKEN_KEY);
+    return await SecureStore.getItemAsync(VERA_MOBILE_SESSION_TOKEN_KEY);
   } catch {
     return null;
   }
@@ -28,7 +28,7 @@ export async function setSessionToken(token: string) {
       return false;
     }
 
-    await SecureStore.setItemAsync(SESSION_TOKEN_KEY, token);
+    await SecureStore.setItemAsync(VERA_MOBILE_SESSION_TOKEN_KEY, token);
     return true;
   } catch {
     return false;
@@ -41,7 +41,7 @@ export async function clearSessionToken() {
       return false;
     }
 
-    await SecureStore.deleteItemAsync(SESSION_TOKEN_KEY);
+    await SecureStore.deleteItemAsync(VERA_MOBILE_SESSION_TOKEN_KEY);
     return true;
   } catch {
     return false;

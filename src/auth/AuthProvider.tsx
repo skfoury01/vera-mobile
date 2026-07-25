@@ -1,59 +1,111 @@
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+import { Platform } from 'react-native';
 
-import { clearSessionToken, getSessionToken } from '@/lib/sessionStorage';
+import {
+  ApiError,
+  getCurrentUser,
+  login as loginWithApi,
+  logout as logoutWithApi,
+  logoutAll as logoutAllWithApi,
+  removeStoredToken,
+  type SafeUser,
+} from '@/lib/api';
 
-export type MobileSession = {
-  token: string;
-};
-
-type SignInInput = {
+type LoginInput = {
   email: string;
   password: string;
+  deviceName?: string;
+  platform?: string;
 };
 
 type AuthContextValue = {
-  session: MobileSession | null;
+  user: SafeUser | null;
   isLoading: boolean;
-  signIn: (input: SignInInput) => Promise<never>;
-  signOut: () => Promise<void>;
+  isAuthenticated: boolean;
+  login: (input: LoginInput) => Promise<SafeUser>;
+  logout: () => Promise<void>;
+  logoutAll: () => Promise<void>;
   refreshSession: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-const TEMPORARY_AUTH_MESSAGE =
-  'Native sign-in is not wired yet. Vera needs a verified mobile authentication endpoint that returns a narrow bearer token; the web HttpOnly session cookie should not be copied into JavaScript.';
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<MobileSession | null>(null);
+  const [user, setUser] = useState<SafeUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const refreshSession = useCallback(async () => {
     setIsLoading(true);
-    const token = await getSessionToken();
-    setSession(token ? { token } : null);
-    setIsLoading(false);
+
+    try {
+      const restoredUser = await getCurrentUser();
+      setUser(restoredUser);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        await removeStoredToken();
+      }
+
+      setUser(null);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    refreshSession().catch(() => {
-      setSession(null);
-      setIsLoading(false);
+    queueMicrotask(() => {
+      refreshSession().catch(() => {
+        setUser(null);
+        setIsLoading(false);
+      });
     });
   }, [refreshSession]);
 
-  const signIn = useCallback(async (_input: SignInInput): Promise<never> => {
-    throw new Error(TEMPORARY_AUTH_MESSAGE);
+  const login = useCallback(async (input: LoginInput) => {
+    const signedInUser = await loginWithApi(
+      input.email.trim(),
+      input.password,
+      input.deviceName,
+      input.platform ?? Platform.OS
+    );
+    setUser(signedInUser);
+    return signedInUser;
   }, []);
 
-  const signOut = useCallback(async () => {
-    await clearSessionToken();
-    setSession(null);
+  const logout = useCallback(async () => {
+    try {
+      await logoutWithApi();
+    } finally {
+      setUser(null);
+    }
+  }, []);
+
+  const logoutAll = useCallback(async () => {
+    try {
+      await logoutAllWithApi();
+    } finally {
+      setUser(null);
+    }
   }, []);
 
   const value = useMemo(
-    () => ({ session, isLoading, signIn, signOut, refreshSession }),
-    [session, isLoading, signIn, signOut, refreshSession]
+    () => ({
+      user,
+      isLoading,
+      isAuthenticated: Boolean(user),
+      login,
+      logout,
+      logoutAll,
+      refreshSession,
+    }),
+    [user, isLoading, login, logout, logoutAll, refreshSession]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
