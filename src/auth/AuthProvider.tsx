@@ -34,6 +34,7 @@ type AuthContextValue = {
   logout: () => Promise<void>;
   logoutAll: () => Promise<void>;
   refreshSession: () => Promise<void>;
+  handleUnauthorized: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -95,6 +96,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const handleUnauthorized = useCallback(async () => {
+    await removeStoredToken();
+    setUser(null);
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -104,8 +110,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       logoutAll,
       refreshSession,
+      handleUnauthorized,
     }),
-    [user, isLoading, login, logout, logoutAll, refreshSession]
+    [user, isLoading, login, logout, logoutAll, refreshSession, handleUnauthorized]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
