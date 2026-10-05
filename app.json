@@ -4,11 +4,11 @@
     "slug": "vera-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/vera-app-icon.png",
     "scheme": "veramobile",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/images/vera-app-icon.png",
       "bundleIdentifier": "com.verapage.veramobile",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
