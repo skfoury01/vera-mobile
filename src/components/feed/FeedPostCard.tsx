@@ -1,16 +1,29 @@
+import { router } from 'expo-router';
+import { FeedVideo } from '@/components/feed/FeedVideo';
+import { usePostActions } from '@/hooks/usePostActions';
+import { isPostLocked, selectMediaUrl } from '@/lib/postMedia';
 import { Image } from 'expo-image';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { REPORT_REASONS } from '@/lib/postApi';
 import type { FeedPost } from '@/lib/feedApi';
 
 type FeedPostCardProps = {
   post: FeedPost;
+  detail?: boolean;
+  visible?: boolean;
+  onComment?: () => void;
 };
 type FeedIconName = SymbolViewProps['name'];
-const PRIVATE_POST_LOCK_IMAGE = '/images/private-post-lock.png';
 
-export function FeedPostCard({ post }: FeedPostCardProps) {
+
+export function FeedPostCard({ post: original, detail = false, visible = true, onComment }: FeedPostCardProps) {
+  const actions = usePostActions(original);
+  const { post } = actions;
+  const openPost = () => { if (!detail) router.push({ pathname: '/post/[postId]', params: { postId: post.id } }); };
+  const openCreator = () => { if (post.creator?.id) router.push({ pathname: '/creator/[creatorId]', params: { creatorId: post.creator.id } }); };
+  if (post.hidden) return null;
   const creatorName =
     post.creator?.profile?.displayName ??
     post.creator?.profile?.username ??
@@ -21,12 +34,26 @@ export function FeedPostCard({ post }: FeedPostCardProps) {
   const title = post.title?.trim() || null;
   const caption = post.caption?.trim() || null;
   const isVideo = String(post.mediaType ?? '').toUpperCase() === 'VIDEO';
-  const isLocked = (post.isLocked || post.locked) && !post.canView;
+  const isLocked = isPostLocked(post);
   const showTitle = Boolean(title && title !== caption);
 
   return (
     <View style={styles.post}>
+      <Modal visible={actions.reportOpen} transparent animationType="slide" onRequestClose={actions.closeReport}>
+        <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: '#00000099' }}>
+          <View style={{ backgroundColor: '#160D20', padding: 20, borderTopLeftRadius: 22, borderTopRightRadius: 22, maxHeight: '85%' }}>
+            <Text style={styles.lockedTitle}>Report post</Text>
+            <Text style={styles.captionMuted}>Choose a reason. Verapage hides reported posts.</Text>
+            <ScrollView>
+              {REPORT_REASONS.map(reason => <Pressable key={reason} accessibilityRole="button" disabled={actions.reporting} onPress={() => actions.submitReport(reason)} style={styles.unlockButton}><Text style={styles.unlockButtonText}>{reason.toLowerCase().replaceAll('_', ' ')}</Text></Pressable>)}
+            </ScrollView>
+            {actions.reporting ? <ActivityIndicator color="#C084FC" /> : null}
+            <Pressable accessibilityRole="button" onPress={actions.closeReport} style={styles.unlockButton}><Text style={styles.unlockButtonText}>Cancel</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
       <View style={styles.creatorRow}>
+        <Pressable accessibilityRole="button" accessibilityLabel="View creator profile" onPress={openCreator} hitSlop={8}>
         {avatarUrl ? (
           <Image source={{ uri: avatarUrl }} style={styles.avatar} contentFit="cover" />
         ) : (
@@ -35,7 +62,8 @@ export function FeedPostCard({ post }: FeedPostCardProps) {
           </View>
         )}
 
-        <View style={styles.creatorText}>
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="View creator profile" onPress={openCreator} style={styles.creatorText}>
           <Text style={styles.creatorName} numberOfLines={1}>
             {creatorName}
           </Text>
@@ -62,40 +90,39 @@ export function FeedPostCard({ post }: FeedPostCardProps) {
               </>
             ) : null}
           </View>
-        </View>
+        </Pressable>
 
-        <Pressable style={({ pressed }) => [styles.moreButton, pressed && styles.pressed]}>
+        <Pressable accessibilityLabel="Post options" accessibilityRole="button" hitSlop={8} onPress={actions.more} style={({ pressed }) => [styles.moreButton, pressed && styles.pressed]}>
           <FeedSymbol name={{ ios: 'ellipsis', android: 'more_horiz', web: 'more_horiz' }} size={18} />
         </Pressable>
       </View>
 
       {mediaUrl ? (
-        <View style={styles.mediaFrame}>
-          <Image source={{ uri: mediaUrl }} style={styles.media} contentFit="cover" transition={160} />
-          {isLocked && <LockedOverlay hasPreview creatorName={creatorName} />}
-          {isVideo && (
-            <View style={styles.videoBadge}>
-              <FeedSymbol name={{ ios: 'play.fill', android: 'play_arrow', web: 'play_arrow' }} size={11} />
-              <Text style={styles.videoBadgeText}>Video</Text>
-            </View>
-          )}
+        <View style={[styles.mediaFrame, isVideo && { aspectRatio: undefined }]}>
+          {isVideo ? <FeedVideo key={mediaUrl} postId={post.id} url={mediaUrl} preview={isLocked} previewStart={post.previewStartSeconds ?? 0} previewDuration={post.previewDurationSeconds ?? 30} visible={visible} /> :
+            <Pressable accessibilityRole="button" accessibilityLabel="Open post" onPress={openPost} style={styles.media}>
+              <Image source={{ uri: mediaUrl }} style={styles.media} contentFit="contain" transition={160} />
+            </Pressable>}
         </View>
-      ) : (
-        <EmptyMedia isLocked={isLocked} />
-      )}
+      ) : <Pressable accessibilityRole="button" accessibilityLabel="Open post" onPress={openPost}><EmptyMedia isLocked={isLocked} onMembership={openCreator} /></Pressable>}
+      {isLocked && mediaUrl ? <View style={{ paddingHorizontal: 16 }}><Text style={styles.captionMuted}>Preview • Join this creator’s membership to unlock the full post.</Text><UnlockButton onPress={openCreator} /></View> : null}
+      {isVideo && !detail ? <Pressable accessibilityRole="button" accessibilityLabel="Open full post" onPress={openPost} style={styles.copyBlock}><Text style={styles.moreText}>Open post</Text></Pressable> : null}
 
       <ActionRow
         commentCount={post.commentCount}
         likeCount={post.likeCount}
         viewerHasLiked={post.viewerHasLiked}
+        viewerHasBookmarked={post.viewerHasBookmarked}
+        onLike={actions.like} onSave={actions.save} onShare={actions.share} onComment={onComment ?? (() => router.push({ pathname: '/post/[postId]', params: { postId: post.id } }))}
+        liking={actions.liking} saving={actions.saving}
       />
 
-      <View style={styles.copyBlock}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Open full caption" onPress={openPost} style={styles.copyBlock}>
         {caption && (
-          <Text style={styles.caption} numberOfLines={3}>
+          <Text style={styles.caption} numberOfLines={detail ? undefined : 3}>
             <Text style={styles.captionName}>{creatorName} </Text>
             {caption}
-            {caption.length > 140 ? <Text style={styles.moreText}> more</Text> : null}
+            {!detail && caption.length > 140 ? <Text style={styles.moreText}> more</Text> : null}
           </Text>
         )}
         {showTitle && <Text style={styles.title}>{title}</Text>}
@@ -105,7 +132,7 @@ export function FeedPostCard({ post }: FeedPostCardProps) {
             <Text style={styles.captionName}>{creatorName}</Text> shared a new post.
           </Text>
         )}
-      </View>
+      </Pressable>
     </View>
   );
 }
@@ -113,16 +140,20 @@ export function FeedPostCard({ post }: FeedPostCardProps) {
 function ActionRow({
   commentCount,
   likeCount,
-  viewerHasLiked,
+  viewerHasLiked, viewerHasBookmarked, onLike, onSave, onShare, onComment, liking, saving,
 }: {
   commentCount: number;
   likeCount: number;
   viewerHasLiked: boolean;
+  viewerHasBookmarked: boolean;
+  onLike: () => void; onSave: () => void; onShare: () => void; onComment: () => void;
+  liking: boolean; saving: boolean;
 }) {
   return (
     <View style={styles.actionsBlock}>
       <View style={styles.actionRow}>
         <ActionButton
+          onPress={onLike} disabled={liking}
           active={viewerHasLiked}
           count={formatCount(likeCount)}
           label="Like"
@@ -130,22 +161,17 @@ function ActionRow({
         />
         <ActionButton
           count={formatCount(commentCount)}
-          label="Comment"
+          label="Comment" onPress={onComment}
           name={{ ios: 'bubble.right', android: 'chat_bubble_outline', web: 'chat_bubble_outline' }}
-        />
-        <ActionButton
-          accent
-          label="Tip"
-          name={{ ios: 'gift', android: 'redeem', web: 'redeem' }}
         />
         <View style={styles.actionSpacer} />
         <ActionButton
-          label="Share"
+          label="Share" onPress={onShare}
           name={{ ios: 'square.and.arrow.up', android: 'ios_share', web: 'ios_share' }}
         />
         <ActionButton
-          label="Save"
-          name={{ ios: 'bookmark', android: 'bookmark_border', web: 'bookmark_border' }}
+          label={viewerHasBookmarked ? "Saved" : "Save"} active={viewerHasBookmarked} onPress={onSave} disabled={saving}
+          name={{ ios: viewerHasBookmarked ? 'bookmark.fill' : 'bookmark', android: 'bookmark_border', web: 'bookmark_border' }}
         />
       </View>
     </View>
@@ -157,8 +183,9 @@ function ActionButton({
   active = false,
   count,
   label,
-  name,
+  name, onPress, disabled = false,
 }: {
+  onPress?: () => void; disabled?: boolean;
   accent?: boolean;
   active?: boolean;
   count?: string;
@@ -168,7 +195,7 @@ function ActionButton({
   const color = accent ? '#D8B4FE' : active ? '#C084FC' : '#F8F5FC';
 
   return (
-    <Pressable style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled, selected: active }} hitSlop={6} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.actionButton, (pressed || disabled) && styles.pressed]}>
       <FeedSymbol name={name} color={color} size={20} />
       {count ? <Text style={[styles.actionCount, active && styles.actionCountActive]}>{count}</Text> : null}
       {!count && <Text style={[styles.actionLabel, accent && styles.actionLabelAccent]}>{label}</Text>}
@@ -176,7 +203,7 @@ function ActionButton({
   );
 }
 
-function EmptyMedia({ isLocked }: { isLocked: boolean }) {
+function EmptyMedia({ isLocked, onMembership }: { isLocked: boolean; onMembership: () => void }) {
   if (!isLocked) {
     return (
       <View style={styles.emptyMedia}>
@@ -196,42 +223,14 @@ function EmptyMedia({ isLocked }: { isLocked: boolean }) {
       </View>
       <Text style={styles.emptyMediaText}>Premium Content</Text>
       <Text style={styles.emptyMediaSubtext}>Subscribe to unlock exclusive content.</Text>
-      <UnlockButton />
+      <UnlockButton onPress={onMembership} />
     </View>
   );
 }
 
-function LockedOverlay({ creatorName, hasPreview }: { creatorName: string; hasPreview: boolean }) {
+function UnlockButton({ onPress }: { onPress: () => void }) {
   return (
-    <View style={styles.lockedOverlay}>
-      <View style={styles.lockedGlowTop} />
-      <View style={styles.lockedGlowBottom} />
-
-      <View style={styles.lockIcon}>
-        <FeedSymbol
-          name={{ ios: 'lock.fill', android: 'lock', web: 'lock' }}
-          color="#FFFFFF"
-          size={20}
-        />
-      </View>
-
-      <Text style={styles.lockedLabel}>PREMIUM DROP</Text>
-      <Text style={styles.lockedTitle}>Premium Content</Text>
-
-      <Text style={styles.lockedMessage}>
-        {hasPreview
-          ? 'Join this creator’s membership to unlock the full post.'
-          : `Unlock exclusive content from ${creatorName}.`}
-      </Text>
-
-      <UnlockButton />
-    </View>
-  );
-}
-
-function UnlockButton() {
-  return (
-    <Pressable style={({ pressed }) => [styles.unlockButton, pressed && styles.pressed]}>
+    <Pressable accessibilityRole="button" accessibilityLabel="View membership information" onPress={onPress} style={({ pressed }) => [styles.unlockButton, pressed && styles.pressed]}>
       <Text style={styles.unlockButtonText}>View membership</Text>
     </Pressable>
   );
@@ -247,20 +246,6 @@ function FeedSymbol({
   size: number;
 }) {
   return <SymbolView name={name} tintColor={color} size={size} weight="semibold" />;
-}
-
-export function selectMediaUrl(post: FeedPost) {
-  const isLocked = (post.isLocked || post.locked) && !post.canView;
-
-  if (isLocked) {
-    return firstRealPreviewUrl(post.previewMediaUrl, post.previewUrl, post.thumbnailUrl);
-  }
-
-  return post.mediaUrl ?? post.thumbnailUrl ?? post.previewUrl ?? null;
-}
-
-function firstRealPreviewUrl(...values: (string | null | undefined)[]) {
-  return values.find((value) => Boolean(value && value !== PRIVATE_POST_LOCK_IMAGE)) ?? null;
 }
 
 function formatRelativeDate(value: string) {
@@ -382,8 +367,8 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   moreButton: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 18,
@@ -593,7 +578,7 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     minWidth: 36,
-    minHeight: 34,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

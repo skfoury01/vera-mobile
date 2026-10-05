@@ -1,9 +1,9 @@
-import { API_URL } from '@/lib/config';
+import { API_URL } from './config';
 import {
   clearSessionToken,
   getSessionToken,
   setSessionToken,
-} from '@/lib/sessionStorage';
+} from './sessionStorage';
 
 export type SafeUser = {
   id: string;
@@ -175,14 +175,17 @@ export async function removeStoredToken() {
   await clearSessionToken();
 }
 
-async function apiRequest<TResponse = unknown>(
+export async function apiRequest<TResponse = unknown>(
   path: string,
   options: ApiRequestOptions = {}
 ): Promise<TResponse | null> {
-  const { body, token, timeoutMs, ...requestInit } = options;
+  const { body, token, timeoutMs, signal, ...requestInit } = options;
+  signal?.throwIfAborted();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
+  const cancel = () => controller.abort();
+  signal?.addEventListener("abort", cancel, { once: true });
   try {
     const response = await fetch(buildApiUrl(path), {
       ...requestInit,
@@ -193,11 +196,13 @@ async function apiRequest<TResponse = unknown>(
     const parsed = await parseResponse(response);
 
     if (!response.ok) {
+      if (response.status === 401 && token && await getStoredToken() === token) await removeStoredToken();
       throw buildResponseError(response.status, parsed);
     }
 
     return parsed as TResponse | null;
   } catch (error) {
+    if (signal?.aborted) throw new DOMException("Request cancelled", "AbortError");
     if (error instanceof ApiError) {
       throw error;
     }
@@ -218,6 +223,7 @@ async function apiRequest<TResponse = unknown>(
     });
   } finally {
     clearTimeout(timeout);
+    signal?.removeEventListener("abort", cancel);
   }
 }
 
@@ -253,12 +259,14 @@ async function parseResponse(response: Response) {
 
   const contentType = response.headers.get('content-type') ?? '';
   if (!contentType.toLowerCase().includes('application/json')) {
+    if (response.ok) throw new ApiError({ status: response.status, code: "invalid_response", userMessage: "Vera returned an unexpected response." });
     return { message: text };
   }
 
   try {
     return JSON.parse(text);
   } catch {
+    if (response.ok) throw new ApiError({ status: response.status, code: "invalid_response", userMessage: "Vera returned invalid JSON." });
     return { message: text };
   }
 }
@@ -280,7 +288,7 @@ function mapErrorCode(status: number, serverCode?: string): AuthErrorCode {
   if (serverCode === 'email_unverified') return 'email_unverified';
   if (serverCode === 'rate_limited') return 'rate_limited';
   if (status === 401) return 'invalid';
-  if (status === 403) return serverCode ?? 'email_unverified';
+  if (status === 403) return serverCode ?? 'forbidden';
   if (status === 429) return 'rate_limited';
   if (serverCode) return serverCode;
   return 'unexpected_server_error';

@@ -18,6 +18,7 @@
     "expo-status-bar": "~57.0.1",
     "expo-symbols": "~57.0.1",
     "expo-system-ui": "~57.0.1",
+    "expo-video": "~57.0.5",
     "expo-web-browser": "~57.0.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -41,7 +42,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "test:feed": "node --test tests/feed.test.cjs"
   },
   "private": true
 }

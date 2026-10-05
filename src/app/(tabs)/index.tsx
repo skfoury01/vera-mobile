@@ -1,4 +1,5 @@
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
+import { clearPostPatches, getPostRevision } from '@/hooks/usePostActions';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -10,6 +11,7 @@ import {
   StyleSheet,
   Text,
   View,
+  type ViewToken,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -19,6 +21,7 @@ import { ApiError } from '@/lib/api';
 import { getFeed, type FeedMode, type FeedPost } from '@/lib/feedApi';
 
 const PAGE_SIZE = 10;
+const VIEWABILITY_CONFIG = { itemVisiblePercentThreshold: 50 };
 type FeedIconName = SymbolViewProps['name'];
 
 export default function HomeScreen() {
@@ -36,12 +39,17 @@ export default function HomeScreen() {
   const loadingMoreRef = useRef(false);
   const firstPageAbortRef = useRef<AbortController | null>(null);
   const paginationAbortRef = useRef<AbortController | null>(null);
+  const [visibleIds, setVisibleIds] = useState<Set<string>>(new Set());
+  const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken<FeedPost>[] }) => {
+    setVisibleIds(new Set(viewableItems.map(item => item.item.id)));
+  }, []);
   const authKey = user?.id ?? 'guest';
 
   const loadFirstPage = useCallback(
     async (mode: 'initial' | 'refresh') => {
       firstPageAbortRef.current?.abort();
       paginationAbortRef.current?.abort();
+      const requestRevision = getPostRevision();
       const controller = new AbortController();
       firstPageAbortRef.current = controller;
       paginationAbortRef.current = null;
@@ -65,6 +73,7 @@ export default function HomeScreen() {
         );
         if (!mountedRef.current || firstPageAbortRef.current !== controller) return;
 
+        clearPostPatches(requestRevision);
         setPosts(dedupePosts(response.posts));
         setNextCursor(response.nextCursor);
         if (mode === 'refresh' || isAuthenticated) {
@@ -96,7 +105,7 @@ export default function HomeScreen() {
   );
 
   const loadMore = useCallback(async () => {
-    if (!nextCursor || loadingMoreRef.current || isInitialLoading || isRefreshing) return;
+    if (firstPageAbortRef.current || !nextCursor || loadingMoreRef.current || isInitialLoading || isRefreshing) return;
 
     paginationAbortRef.current?.abort();
     const controller = new AbortController();
@@ -163,13 +172,13 @@ export default function HomeScreen() {
     ({ item, index }: { item: FeedPost; index: number }) => {
       return (
         <View>
-          <FeedPostCard post={item} />
+          <FeedPostCard key={`${authKey}:${item.id}`} post={item} visible={visibleIds.has(item.id)} />
           {index === 0 ? <PremiumDropCard /> : null}
           {index === 1 ? <CreatorRoomCard /> : null}
         </View>
       );
     },
-    []
+    [authKey, visibleIds]
   );
 
   if (isInitialLoading) {
@@ -203,6 +212,9 @@ export default function HomeScreen() {
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <FlatList
           data={posts}
+          extraData={visibleIds}
+          viewabilityConfig={VIEWABILITY_CONFIG}
+          onViewableItemsChanged={onViewableItemsChanged}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           showsVerticalScrollIndicator={false}
@@ -296,8 +308,8 @@ function FeedHeader({
           </View>
         </View>
         <View style={styles.headerActions}>
-          <IconButton name={{ ios: 'magnifyingglass', android: 'search', web: 'search' }} />
-          <IconButton name={{ ios: 'bell', android: 'notifications', web: 'notifications' }} />
+          <IconButton label="Discover" onPress={() => router.push('/(tabs)/discover')} name={{ ios: 'magnifyingglass', android: 'search', web: 'search' }} />
+          <IconButton label="Notifications" onPress={() => router.push('/(tabs)/notifications')} name={{ ios: 'bell', android: 'notifications', web: 'notifications' }} />
         </View>
       </View>
 
@@ -559,9 +571,9 @@ function Separator() {
   return <View style={styles.separator} />;
 }
 
-function IconButton({ name }: { name: FeedIconName }) {
+function IconButton({ name, label, onPress }: { name: FeedIconName; label: string; onPress: () => void }) {
   return (
-    <Pressable style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} hitSlop={8} onPress={onPress} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
       <FeedSymbol name={name} size={18} />
     </Pressable>
   );
