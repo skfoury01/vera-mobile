@@ -36,23 +36,30 @@ export function FeedPostCard({ post }: FeedPostCardProps) {
         )}
 
         <View style={styles.creatorText}>
-          <View style={styles.metaRow}>
-            <Text style={styles.creatorName} numberOfLines={1}>
-              {creatorName}
-            </Text>
-            <Text style={styles.dot}>•</Text>
-            <Text style={styles.date}>{formatRelativeDate(post.createdAt)}</Text>
-          </View>
+          <Text style={styles.creatorName} numberOfLines={1}>
+            {creatorName}
+          </Text>
+
           <View style={styles.subMetaRow}>
-            {username && (
+            {username ? (
               <Text style={styles.username} numberOfLines={1}>
                 {username}
               </Text>
-            )}
+            ) : null}
+
+            {username ? <Text style={styles.dot}>•</Text> : null}
+
+            <Text style={styles.date}>{formatRelativeDate(post.createdAt)}</Text>
+
             {post.creator?.streakCurrent ? (
-              <View style={styles.streakPill}>
-                <Text style={styles.streak}>{post.creator.streakCurrent} day streak</Text>
-              </View>
+              <>
+                <Text style={styles.dot}>•</Text>
+                <View style={styles.streakPill}>
+                  <Text style={styles.streak}>
+                    {post.creator.streakCurrent} day streak
+                  </Text>
+                </View>
+              </>
             ) : null}
           </View>
         </View>
@@ -158,7 +165,7 @@ function ActionButton({
   label: string;
   name: FeedIconName;
 }) {
-  const color = accent ? '#f2d38d' : active ? '#ff7fa9' : '#fffaf1';
+  const color = accent ? '#D8B4FE' : active ? '#C084FC' : '#F8F5FC';
 
   return (
     <Pressable style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}>
@@ -185,7 +192,7 @@ function EmptyMedia({ isLocked }: { isLocked: boolean }) {
       <View style={styles.emptyAccentTop} />
       <View style={styles.emptyAccentBottom} />
       <View style={styles.lockIcon}>
-        <FeedSymbol name={{ ios: 'lock.fill', android: 'lock', web: 'lock' }} color="#17100a" size={18} />
+        <FeedSymbol name={{ ios: 'lock.fill', android: 'lock', web: 'lock' }} color="#12091F" size={18} />
       </View>
       <Text style={styles.emptyMediaText}>Premium Content</Text>
       <Text style={styles.emptyMediaSubtext}>Subscribe to unlock exclusive content.</Text>
@@ -197,16 +204,27 @@ function EmptyMedia({ isLocked }: { isLocked: boolean }) {
 function LockedOverlay({ creatorName, hasPreview }: { creatorName: string; hasPreview: boolean }) {
   return (
     <View style={styles.lockedOverlay}>
-      <View style={styles.lockedPanel}>
-        <View style={styles.lockIcon}>
-          <FeedSymbol name={{ ios: 'lock.fill', android: 'lock', web: 'lock' }} color="#17100a" size={17} />
-        </View>
-        <Text style={styles.lockedLabel}>Subscriber-only</Text>
-        <Text style={styles.lockedMessage}>
-          {hasPreview ? 'Subscribe to unlock this post' : `Unlock premium posts from ${creatorName}`}
-        </Text>
-        <UnlockButton />
+      <View style={styles.lockedGlowTop} />
+      <View style={styles.lockedGlowBottom} />
+
+      <View style={styles.lockIcon}>
+        <FeedSymbol
+          name={{ ios: 'lock.fill', android: 'lock', web: 'lock' }}
+          color="#FFFFFF"
+          size={20}
+        />
       </View>
+
+      <Text style={styles.lockedLabel}>PREMIUM DROP</Text>
+      <Text style={styles.lockedTitle}>Premium Content</Text>
+
+      <Text style={styles.lockedMessage}>
+        {hasPreview
+          ? 'Join this creator’s membership to unlock the full post.'
+          : `Unlock exclusive content from ${creatorName}.`}
+      </Text>
+
+      <UnlockButton />
     </View>
   );
 }
@@ -220,7 +238,7 @@ function UnlockButton() {
 }
 
 function FeedSymbol({
-  color = '#fffaf1',
+  color = '#F8F5FC',
   name,
   size,
 }: {
@@ -270,26 +288,26 @@ const styles = StyleSheet.create({
   post: {
     overflow: 'hidden',
     borderBottomWidth: 1,
-    borderBottomColor: '#19151f',
-    backgroundColor: '#050507',
+    borderBottomColor: '#1E1428',
+    backgroundColor: '#07050B',
     paddingBottom: 14,
   },
   creatorRow: {
-    minHeight: 58,
+    minHeight: 66,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 9,
+    gap: 11,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 10,
   },
   avatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#d8b46a33',
-    backgroundColor: '#191420',
+    borderColor: '#9B5CFF33',
+    backgroundColor: '#1B1026',
   },
   avatarFallback: {
     width: 40,
@@ -298,11 +316,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#d8b46a33',
-    backgroundColor: '#15111a',
+    borderColor: '#9B5CFF33',
+    backgroundColor: '#160D20',
   },
   avatarInitial: {
-    color: '#f2d38d',
+    color: '#D8B4FE',
     fontSize: 16,
     lineHeight: 20,
     fontWeight: '900',
@@ -312,8 +330,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   creatorName: {
-    maxWidth: 168,
-    color: '#fffaf1',
+    maxWidth: 220,
+    color: '#F8F5FC',
     fontSize: 15,
     lineHeight: 19,
     fontWeight: '900',
@@ -324,40 +342,41 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   subMetaRow: {
-    marginTop: 2,
+    minWidth: 0,
+    marginTop: 3,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
+    gap: 5,
   },
   dot: {
-    color: '#62596c',
+    color: '#6F647A',
     fontSize: 11,
     lineHeight: 15,
     fontWeight: '900',
   },
   username: {
-    maxWidth: 145,
-    color: '#928a9d',
-    fontSize: 12,
-    lineHeight: 16,
+    maxWidth: 112,
+    color: '#A69CAF',
+    fontSize: 11,
+    lineHeight: 15,
     fontWeight: '700',
   },
   streakPill: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#d8b46a30',
-    backgroundColor: '#d8b46a12',
+    borderColor: '#9B5CFF30',
+    backgroundColor: '#9B5CFF12',
     paddingHorizontal: 7,
     paddingVertical: 2,
   },
   streak: {
-    color: '#f2d38d',
+    color: '#CFA8FF',
     fontSize: 10,
     lineHeight: 13,
     fontWeight: '800',
   },
   date: {
-    color: '#777080',
+    color: '#817689',
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '800',
@@ -371,13 +390,13 @@ const styles = StyleSheet.create({
   },
   mediaFrame: {
     position: 'relative',
-    aspectRatio: 3 / 4,
+    aspectRatio: 4 / 5,
     marginHorizontal: 8,
     overflow: 'hidden',
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#2b2432',
-    backgroundColor: '#07070a',
+    borderColor: '#33203F',
+    backgroundColor: '#09060E',
   },
   media: {
     width: '100%',
@@ -398,12 +417,32 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   videoBadgeText: {
-    color: '#fffaf1',
+    color: '#F8F5FC',
     fontSize: 11,
     lineHeight: 14,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
+  lockedGlowTop: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    top: -110,
+    right: -70,
+    backgroundColor: '#9B5CFF24',
+  },
+
+  lockedGlowBottom: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    bottom: -90,
+    left: -55,
+    backgroundColor: '#6D28D920',
+  },
+
   lockedOverlay: {
     position: 'absolute',
     top: 0,
@@ -412,7 +451,7 @@ const styles = StyleSheet.create({
     left: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#050507b8',
+    backgroundColor: '#07050Bb8',
     padding: 22,
   },
   lockedPanel: {
@@ -421,43 +460,59 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#d8b46a38',
-    backgroundColor: '#0c0a0ed9',
+    borderColor: '#9B5CFF38',
+    backgroundColor: '#140B1EE6',
     padding: 18,
     gap: 8,
   },
   lockIcon: {
-    width: 38,
-    height: 38,
+    width: 48,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 19,
-    backgroundColor: '#d8b46a',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#D8B4FE66',
+    backgroundColor: '#A855F755',
   },
   lockedLabel: {
-    color: '#f2d38d',
-    fontSize: 11,
-    lineHeight: 14,
+    marginTop: 14,
+    color: '#C084FC',
+    fontSize: 10,
+    lineHeight: 13,
     fontWeight: '900',
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+  },
+  lockedTitle: {
+    marginTop: 5,
+    color: '#F8F5FC',
+    textAlign: 'center',
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: '900',
   },
   lockedMessage: {
-    color: '#fffaf1',
+    maxWidth: 280,
+    marginTop: 8,
+    color: '#C8BED2',
     textAlign: 'center',
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: '800',
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '600',
   },
   unlockButton: {
-    marginTop: 4,
-    borderRadius: 999,
-    backgroundColor: '#d8b46a',
-    paddingHorizontal: 15,
-    paddingVertical: 9,
+    minWidth: 176,
+    minHeight: 44,
+    marginTop: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 15,
+    backgroundColor: '#9B5CFF',
+    paddingHorizontal: 18,
+    paddingVertical: 11,
   },
   unlockButtonText: {
-    color: '#17100a',
+    color: '#12091F',
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '900',
@@ -471,8 +526,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#2b2432',
-    backgroundColor: '#08070b',
+    borderColor: '#33203F',
+    backgroundColor: '#0D0713',
     padding: 24,
     gap: 8,
   },
@@ -485,8 +540,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#d8b46a33',
-    backgroundColor: '#09080c',
+    borderColor: '#9B5CFF33',
+    backgroundColor: '#100817',
     padding: 22,
     gap: 8,
   },
@@ -497,7 +552,7 @@ const styles = StyleSheet.create({
     width: 180,
     height: 180,
     borderRadius: 90,
-    backgroundColor: '#6b4fff24',
+    backgroundColor: '#A855F72E',
   },
   emptyAccentBottom: {
     position: 'absolute',
@@ -506,17 +561,17 @@ const styles = StyleSheet.create({
     width: 210,
     height: 210,
     borderRadius: 105,
-    backgroundColor: '#d8b46a18',
+    backgroundColor: '#9B5CFF18',
   },
   emptyMediaText: {
-    color: '#fffaf1',
+    color: '#F8F5FC',
     textAlign: 'center',
     fontSize: 18,
     lineHeight: 24,
     fontWeight: '900',
   },
   emptyMediaSubtext: {
-    color: '#9d96a8',
+    color: '#A69CAF',
     textAlign: 'center',
     fontSize: 13,
     lineHeight: 18,
@@ -524,7 +579,8 @@ const styles = StyleSheet.create({
   },
   actionsBlock: {
     paddingHorizontal: 10,
-    paddingTop: 9,
+    paddingTop: 10,
+    paddingBottom: 2,
   },
   actionRow: {
     minHeight: 36,
@@ -546,22 +602,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   actionCount: {
-    color: '#b8b0c5',
+    color: '#BDB3C8',
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '800',
   },
   actionCountActive: {
-    color: '#ff9bbb',
+    color: '#D8B4FE',
   },
   actionLabel: {
-    color: '#b8b0c5',
+    color: '#BDB3C8',
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '800',
   },
   actionLabelAccent: {
-    color: '#f2d38d',
+    color: '#D8B4FE',
   },
   copyBlock: {
     paddingHorizontal: 16,
@@ -572,36 +628,36 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     overflow: 'hidden',
     borderRadius: 999,
-    color: '#d8b46a',
+    color: '#9B5CFF',
     fontSize: 10,
     lineHeight: 14,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
   title: {
-    color: '#fffaf1',
+    color: '#F8F5FC',
     fontSize: 14,
     lineHeight: 19,
     fontWeight: '900',
   },
   caption: {
-    color: '#d8d2df',
+    color: '#E1DAE8',
     fontSize: 14,
     lineHeight: 20,
     fontWeight: '600',
   },
   captionMuted: {
-    color: '#a59dae',
+    color: '#A69CAF',
     fontSize: 14,
     lineHeight: 20,
     fontWeight: '600',
   },
   captionName: {
-    color: '#fffaf1',
+    color: '#F8F5FC',
     fontWeight: '900',
   },
   moreText: {
-    color: '#928a9d',
+    color: '#A69CAF',
     fontWeight: '800',
   },
   pressed: {

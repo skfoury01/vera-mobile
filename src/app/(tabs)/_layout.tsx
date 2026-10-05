@@ -1,12 +1,12 @@
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 
 const colors = {
-  background: '#050507',
-  elevated: '#111116',
-  active: '#f7f1e8',
-  muted: '#8d8798',
-  indicator: '#24202c',
-  accent: '#d8b46a',
+  background: '#08050C',
+  elevated: '#160C1E',
+  active: '#F8F5FC',
+  muted: '#95899F',
+  indicator: '#321A42',
+  accent: '#B56CFF',
 };
 
 export default function TabsLayout() {

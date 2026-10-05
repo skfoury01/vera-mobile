@@ -47,10 +47,13 @@ export type FeedResponse = {
   pageSize: number;
 };
 
+export type FeedMode = 'for-you' | 'following';
+
 type GetFeedInput = {
   cursor?: string | null;
   take?: number;
   windowDays?: number;
+  mode?: FeedMode;
 };
 
 type GetFeedOptions = {
@@ -95,6 +98,7 @@ function buildFeedUrl(input: GetFeedInput) {
   if (input.cursor) url.searchParams.set('cursor', input.cursor);
   if (typeof input.take === 'number') url.searchParams.set('take', String(input.take));
   if (typeof input.windowDays === 'number') url.searchParams.set('windowDays', String(input.windowDays));
+  if (input.mode) url.searchParams.set('mode', input.mode);
   return url.toString();
 }
 
