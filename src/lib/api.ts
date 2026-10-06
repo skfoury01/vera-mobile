@@ -180,7 +180,11 @@ export async function apiRequest<TResponse = unknown>(
   options: ApiRequestOptions = {}
 ): Promise<TResponse | null> {
   const { body, token, timeoutMs, signal, ...requestInit } = options;
-  signal?.throwIfAborted();
+  if (signal?.aborted) {
+    const abortError = new Error('Request cancelled');
+    abortError.name = 'AbortError';
+    throw abortError;
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs ?? DEFAULT_TIMEOUT_MS);
 

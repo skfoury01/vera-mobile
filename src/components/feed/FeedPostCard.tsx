@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { router } from 'expo-router';
 import { FeedVideo } from '@/components/feed/FeedVideo';
 import { usePostActions } from '@/hooks/usePostActions';
@@ -14,15 +15,21 @@ type FeedPostCardProps = {
   detail?: boolean;
   visible?: boolean;
   onComment?: () => void;
+  videoThumbnails?: boolean;
+  onMembership?: () => void;
+  lockedMessage?: string;
+  membershipActionLabel?: string;
+  lockedContent?: ReactNode;
 };
 type FeedIconName = SymbolViewProps['name'];
 
 
-export function FeedPostCard({ post: original, detail = false, visible = true, onComment }: FeedPostCardProps) {
+export function FeedPostCard({ post: original, detail = false, visible = true, onComment, videoThumbnails = false, onMembership, lockedMessage, membershipActionLabel, lockedContent }: FeedPostCardProps) {
   const actions = usePostActions(original);
   const { post } = actions;
   const openPost = () => { if (!detail) router.push({ pathname: '/post/[postId]', params: { postId: post.id } }); };
   const openCreator = () => { if (post.creator?.id) router.push({ pathname: '/creator/[creatorId]', params: { creatorId: post.creator.id } }); };
+  const membership = onMembership ?? openCreator;
   if (post.hidden) return null;
   const creatorName =
     post.creator?.profile?.displayName ??
@@ -97,16 +104,21 @@ export function FeedPostCard({ post: original, detail = false, visible = true, o
         </Pressable>
       </View>
 
-      {mediaUrl ? (
+      {isLocked && lockedContent ? lockedContent : videoThumbnails && isVideo ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Open video post" onPress={openPost} style={styles.mediaFrame}>
+          {!isLocked && post.thumbnailUrl ? <Image source={{ uri: post.thumbnailUrl }} style={styles.media} contentFit="contain" /> : <View style={styles.emptyMedia}><Text style={styles.emptyMediaText}>{isLocked ? 'Locked video' : 'Video post'}</Text></View>}
+          <View style={{ position: 'absolute', alignSelf: 'center', top: '42%', backgroundColor: '#160D20CC', padding: 14, borderRadius: 30 }}><FeedSymbol name={{ ios: isLocked ? 'lock.fill' : 'play.fill', android: isLocked ? 'lock' : 'play_arrow', web: isLocked ? 'lock' : 'play_arrow' }} size={24} /></View>
+        </Pressable>
+      ) : mediaUrl ? (
         <View style={[styles.mediaFrame, isVideo && { aspectRatio: undefined }]}>
           {isVideo ? <FeedVideo key={mediaUrl} postId={post.id} url={mediaUrl} preview={isLocked} previewStart={post.previewStartSeconds ?? 0} previewDuration={post.previewDurationSeconds ?? 30} visible={visible} /> :
             <Pressable accessibilityRole="button" accessibilityLabel="Open post" onPress={openPost} style={styles.media}>
               <Image source={{ uri: mediaUrl }} style={styles.media} contentFit="contain" transition={160} />
             </Pressable>}
         </View>
-      ) : <Pressable accessibilityRole="button" accessibilityLabel="Open post" onPress={openPost}><EmptyMedia isLocked={isLocked} onMembership={openCreator} /></Pressable>}
-      {isLocked && mediaUrl ? <View style={{ paddingHorizontal: 16 }}><Text style={styles.captionMuted}>Preview • Join this creator’s membership to unlock the full post.</Text><UnlockButton onPress={openCreator} /></View> : null}
-      {isVideo && !detail ? <Pressable accessibilityRole="button" accessibilityLabel="Open full post" onPress={openPost} style={styles.copyBlock}><Text style={styles.moreText}>Open post</Text></Pressable> : null}
+      ) : videoThumbnails && !isLocked ? null : <Pressable accessibilityRole="button" accessibilityLabel="Open post" onPress={openPost}><EmptyMedia isLocked={isLocked} onMembership={membership} message={lockedMessage} actionLabel={membershipActionLabel} /></Pressable>}
+      {isLocked && !lockedContent && (mediaUrl || (videoThumbnails && isVideo)) ? <View style={{ paddingHorizontal: 16 }}><Text style={styles.captionMuted}>{lockedMessage ?? 'Preview • Join this creator’s membership to unlock the full post.'}</Text><UnlockButton onPress={membership} label={membershipActionLabel} /></View> : null}
+      {isVideo && !detail && !(isLocked && lockedContent) ? <Pressable accessibilityRole="button" accessibilityLabel="Open full post" onPress={openPost} style={styles.copyBlock}><Text style={styles.moreText}>Open post</Text></Pressable> : null}
 
       <ActionRow
         commentCount={post.commentCount}
@@ -203,7 +215,7 @@ function ActionButton({
   );
 }
 
-function EmptyMedia({ isLocked, onMembership }: { isLocked: boolean; onMembership: () => void }) {
+function EmptyMedia({ isLocked, onMembership, message, actionLabel }: { isLocked: boolean; onMembership: () => void; message?: string; actionLabel?: string }) {
   if (!isLocked) {
     return (
       <View style={styles.emptyMedia}>
@@ -222,16 +234,16 @@ function EmptyMedia({ isLocked, onMembership }: { isLocked: boolean; onMembershi
         <FeedSymbol name={{ ios: 'lock.fill', android: 'lock', web: 'lock' }} color="#12091F" size={18} />
       </View>
       <Text style={styles.emptyMediaText}>Premium Content</Text>
-      <Text style={styles.emptyMediaSubtext}>Subscribe to unlock exclusive content.</Text>
-      <UnlockButton onPress={onMembership} />
+      <Text style={styles.emptyMediaSubtext}>{message ?? 'Subscribe to unlock exclusive content.'}</Text>
+      <UnlockButton onPress={onMembership} label={actionLabel} />
     </View>
   );
 }
 
-function UnlockButton({ onPress }: { onPress: () => void }) {
+function UnlockButton({ onPress, label = 'View membership' }: { onPress: () => void; label?: string }) {
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel="View membership information" onPress={onPress} style={({ pressed }) => [styles.unlockButton, pressed && styles.pressed]}>
-      <Text style={styles.unlockButtonText}>View membership</Text>
+    <Pressable accessibilityRole="button" accessibilityLabel={label === 'View membership' ? 'View membership information' : label} onPress={onPress} style={({ pressed }) => [styles.unlockButton, pressed && styles.pressed]}>
+      <Text style={styles.unlockButtonText}>{label}</Text>
     </Pressable>
   );
 }
