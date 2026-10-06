@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/immutability -- expo-video exposes a mutable native SharedObject; its documented API sets muted/currentTime. */
 import { useEvent, useEventListener } from 'expo';
 import { router, useFocusEffect } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -165,7 +166,15 @@ function Player({ source, active, muted, onMute, preview, previewStart, previewD
       {status === 'loading' ? <ActivityIndicator color="#C084FC" /> : status === 'error' ? <Text style={styles.text}>Video unavailable</Text> : !isPlaying ? <Text style={styles.play}>▶</Text> : null}
     </Pressable>
     <Pressable accessibilityRole="button" accessibilityLabel={muted ? 'Unmute video' : 'Mute video'} hitSlop={8} onPress={onMute} style={styles.mute}>
-      <Text style={styles.text}>{muted ? 'Unmute' : 'Mute'}</Text>
+      <SymbolView
+        name={muted
+          ? { ios: 'speaker.slash.fill', android: 'volume_off', web: 'volume_off' }
+          : { ios: 'speaker.wave.2.fill', android: 'volume_up', web: 'volume_up' }}
+        tintColor="#F8F5FC"
+        size={18}
+        pointerEvents="none"
+        accessible={false}
+      />
     </Pressable>
   </View>;
 }
@@ -175,6 +184,6 @@ const styles = StyleSheet.create({
   text: { color: '#F8F5FC' },
   tap: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center' },
   play: { color: 'white', fontSize: 36 },
-  mute: { position: 'absolute', bottom: 12, right: 12, minHeight: 44, padding: 12, borderRadius: 16, backgroundColor: '#160D20CC' },
+  mute: { position: 'absolute', bottom: 12, right: 12, width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: '#160D20CC', borderWidth: 1, borderColor: '#C084FC33' },
   previewButton: { minHeight: 44, padding: 14, backgroundColor: '#9B5CFF', borderRadius: 16 },
 });
